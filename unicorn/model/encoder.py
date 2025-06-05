@@ -29,7 +29,7 @@ def mean_pooling(model_output, attention_mask):
 class MPEncoder(nn.Module):
     def __init__(self):
         super(MPEncoder, self).__init__()
-        model_path= "all-mpnet-base-v2"
+        model_path= "sentence-transformers/all-mpnet-base-v2"
         self.encoder = AutoModel.from_pretrained(model_path)
 
     def forward(self, x, mask=None, segment=None):
@@ -47,7 +47,7 @@ class MPEncoder(nn.Module):
 class DistilBertEncoder(nn.Module):
     def __init__(self):
         super(DistilBertEncoder, self).__init__()
-        self.encoder = DistilBertModel.from_pretrained('distilbert-base-multilingual-cased')
+        self.encoder = AutoModel.from_pretrained('distilbert/distilbert-base-multilingual-cased')
         self.pooler = nn.Linear(param.hidden_size, param.hidden_size)
 
     def forward(self, x, mask=None):
@@ -101,7 +101,7 @@ class XLNetEncoder(nn.Module):
 class DebertaBaseEncoder(nn.Module):
     def __init__(self):
         super(DebertaBaseEncoder, self).__init__()
-        self.encoder = DebertaModel.from_pretrained("deberta-base")
+        self.encoder = DebertaModel.from_pretrained("microsoft/deberta-base")
 
     def forward(self, x, mask=None, segment=None):
         outputs = self.encoder(x, attention_mask=mask, token_type_ids=segment)
