@@ -1,0 +1,2 @@
+filename,model,time (sec),Precision %,Recall %,F1 %
+musicians_semjoinable,deberta_base,0.9366906369104981,66.66665555555741,49.99999375000079,57.14280000004287

@@ -108,7 +108,7 @@ def evaluate_moe(encoder, moelayer, classifier, data_loader, args=None, index=-1
     if flag == "get_prob":
         return probility
     if all == 1:
-        return f1, recall, acc
+        return f1, recall, precision
     return f1
 
 def evaluate_wo_moe(encoder, classifier, data_loader, args=None, flag=None, write=False, prob_name=None, all=None):

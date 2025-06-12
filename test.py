@@ -5,6 +5,8 @@ import torch
 import random
 import csv
 import argparse
+import os
+import time
 
 from unicorn.model.encoder import (BertEncoder, MPEncoder, DistilBertEncoder, DistilRobertaEncoder, DebertaBaseEncoder, DebertaLargeEncoder,
                    RobertaEncoder, XLNetEncoder)
@@ -14,7 +16,14 @@ from unicorn.trainer import evaluate
 from unicorn.utils.utils import get_data, init_model
 from unicorn.dataprocess import predata
 from unicorn.utils import param
+import pandas as pd
+import re
+import json
+import ast
 
+
+def contains_ec_regex(s):
+    return bool(re.search(r'_ec', s))
 
 csv.field_size_limit(500 * 1024 * 1024)
 def parse_arguments():
@@ -120,15 +129,15 @@ def main():
     if args.model == 'bert':
         tokenizer = BertTokenizer.from_pretrained('bert-base-multilingual-cased')
     if args.model == 'mpnet':
-        tokenizer = AutoTokenizer.from_pretrained('all-mpnet-base-v2')
+        tokenizer = AutoTokenizer.from_pretrained('sentence-transformers/all-mpnet-base-v2')
     if args.model == 'deberta_base':
-        tokenizer = DebertaTokenizer.from_pretrained('deberta-base')
+        tokenizer = DebertaTokenizer.from_pretrained('microsoft/deberta-base')
     if args.model == 'deberta_large':
         tokenizer = DebertaTokenizer.from_pretrained('deberta-large')
     if args.model == 'xlnet':
         tokenizer = XLNetTokenizer.from_pretrained('xlnet-base-cased')
     if args.model == 'distilbert':
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+        tokenizer = DistilBertTokenizer.from_pretrained('distilbert/distilbert-base-uncased')
 
     if args.model == 'bert':
         encoder = BertEncoder()
@@ -169,41 +178,212 @@ def main():
             moelayer = init_model(args, moelayer)
 
             
-    test_sets = []
-    for p in args.dataset_path.split(" "):
-        print("test data path: ", p)
-        test_sets.append(get_data(p))
+    # test_sets = []
+    # for p in args.dataset_path.split(" "):
+    #     print("test data path: ", p)
+    #     test_sets.append(get_data(p))
     
     if args.test_metrics is None:
         test_metrics = ['f1' for i in range(0, len(test_sets))]
     else:
         test_metrics = args.test_metrics.split(" ")
 
+    datasets = ['assays', 'miller2', 'prospect']
+    type_ds = ['Joinable', 'Unionable', 'View-Unionable', 'Semantically-Joinable']
+    results_folder = 'content'
+    for dataset in datasets: 
+        for type_d in type_ds:
+            directory_path = f'data/val-exp/{dataset}/{type_d}'
+            results_filename = f'results/{results_folder}/{dataset}_{type_d.lower()}.csv'
+            
+            if os.path.exists(results_filename):
+                print(results_filename)
+                continue
 
-    test_data_loaders = []
-    for i in range(len(test_sets)):
-        print("test dataset ", i+1)
-        fea = predata.convert_examples_to_features([ [x[0]+" [SEP] "+x[1]] for x in test_sets[i] ], [int(x[2]) for x in test_sets[i]], args.max_seq_length, tokenizer)
-        test_data_loaders.append(predata.convert_fea_to_tensor(fea, args.batch_size, do_train=0))
+            if not os.path.exists(directory_path):
+                raise FileNotFoundError(f"The path '{directory_path}' does not exist.")
+                    
+            # Print the immediate subfolders
+            print(f"Immediate subfolders of '{directory_path}':")
+            my_list = os.listdir(directory_path)
+            cnt = 0
+            for file in my_list:
+                print(f"------ {cnt}/{len(my_list)} ------------ {dataset} {type_d} \n")
+                if contains_ec_regex(file):
+                    cnt += 1
+                    continue
+                
+                file_path = f'{directory_path}/{file}'
 
-    print("test datasets num: ",len(test_data_loaders))
+                df_source = pd.read_csv(f"{file_path}/pyjedai/{file}_source.csv")
+                df_target = pd.read_csv(f"{file_path}/pyjedai/{file}_target.csv")
+                gtruth_filename = f'{file_path}/{file.lower()}_mapping.json'
+                
+                #read the json file
+                with open(gtruth_filename, 'r') as f:
+                    gtruth_data = json.load(f)
+                
+                matching_dict = {}
 
-    f1s = []
-    recalls = []
-    accs = []
-    for k in range(len(test_data_loaders)):
-        print("test datasets : ",k+1)
-        if test_metrics[k]=='hit': # for EA
-            prob = evaluate.evaluate_moe(encoder, moelayer, classifiers, test_data_loaders[k], args=args, flag="get_prob", prob_name="prob.json")
-            evaluate.calculate_hits_k(test_sets[k], prob)
+                for pair in gtruth_data['matches']:
+                    matching_dict[pair['source_column']] = pair['target_column']
+
+                
+                test_data = []
+                offset = df_source.shape[0]
+                for _, row in df_source.iterrows():
+                    source_str = f"[ATT] {row['id']}"
+                    source_val = ""
+
+                    if isinstance(row['data'], str):
+                        data_list = ast.literal_eval(row['data'])
+                        val_list = " [VAL] ".join(data_list)
+                        source_val = f" [VAL] {val_list}"
+
+
+                    source_str += source_val
+                    
+                    for _, t_row in df_target.iterrows():
+                        target_str = f"[ATT] {t_row['id'] + offset}"
+                        target_val = ""
+                        if isinstance(t_row['data'], str):
+                            t_data_list = ast.literal_eval(t_row['data'])
+                            t_val_list = " [VAL] ".join(t_data_list)
+                            target_val = f" [VAL] {t_val_list}"
+                        target_str += target_val
+                        matching = 0
+                        if row['attributes'] in matching_dict and matching_dict[row['attributes']] == t_row['attributes']:
+                            matching = 1
+                        test_data.append([source_str, target_str, matching])
+                start_time = time.perf_counter()
+                fea = predata.convert_examples_to_features([ [x[0]+" [SEP] "+x[1]] for x in test_data ], [int(x[2]) for x in test_data], args.max_seq_length, tokenizer)
+                test_data_loader = predata.convert_fea_to_tensor(fea, args.batch_size, do_train=0)
+                f1, recall, precision = evaluate.evaluate_moe(encoder, moelayer, classifiers, test_data_loader, args=args, all=1)
+                final_ev = {}
+                final_ev['filename'] = file
+                final_ev['model'] = args.model
+                final_ev['time (sec)'] = time.perf_counter() - start_time
+                final_ev['Precision %'] = precision * 100 
+                final_ev['Recall %'] = recall * 100
+                final_ev['F1 %'] = f1 * 100
+
+                df_dictionary = pd.DataFrame([final_ev])
+                cnt += 1
+
+                if os.path.exists(results_filename):
+                    df_dictionary.to_csv(results_filename, mode='a+', header=False, index=False)
+                else:
+                    df_dictionary.to_csv(results_filename, mode='a+', header=True, index=False)
+    
+    
+    dataset = 'wikidata'
+    d = {
+        "Joinable" : "Musicians_joinable", 
+        'Unionable': "Musicians_unionable",
+        'View-Unionable': "Musicians_viewunion",
+        'Semantically-Joinable' : "Musicians_semjoinable"
+    }
+    
+    directory_path = f'data/val-exp/Wikidata/Musicians'
+    for type_d in type_ds:
+        results_filename = f'results/{results_folder}/{dataset}_{type_d.lower()}.csv'
+    
+        if os.path.exists(results_filename):
+            print(results_filename)
+            continue
+
+        if not os.path.exists(directory_path):
+            raise FileNotFoundError(f"The path '{directory_path}' does not exist.")
+            
+        # Print the immediate subfolders
+        
+        file = d[type_d].lower()
+        file_path = f'{directory_path}/{d[type_d]}'
+        
+
+        df_source = pd.read_csv(f"{file_path}/pyjedai/{file}_source.csv")
+        df_target = pd.read_csv(f"{file_path}/pyjedai/{file}_target.csv")
+        gtruth_filename = f'{file_path}/{file.lower()}_mapping.json'
+        
+        #read the json file
+        with open(gtruth_filename, 'r') as f:
+            gtruth_data = json.load(f)
+        
+        matching_dict = {}
+
+        for pair in gtruth_data['matches']:
+            matching_dict[pair['source_column']] = pair['target_column']
+
+        
+        test_data = []
+        offset = df_source.shape[0]
+        for _, row in df_source.iterrows():
+            source_str = f"[ATT] {row['attributes']}"
+            # source_val = ""
+
+            # if isinstance(row['data'], str):
+            #     data_list = ast.literal_eval(row['data'])
+            #     val_list = " [VAL] ".join(data_list)
+            #     source_val = f" [VAL] {val_list}"
+
+
+            # source_str += source_val
+            
+            for _, t_row in df_target.iterrows():
+                target_str = f"[ATT] {t_row['attributes']}"
+                # target_val = ""
+                # if isinstance(t_row['data'], str):
+                #     t_data_list = ast.literal_eval(t_row['data'])
+                #     t_val_list = " [VAL] ".join(t_data_list)
+                #     target_val = f" [VAL] {t_val_list}"
+                # target_str += target_val
+                matching = 0
+                if row['attributes'] in matching_dict and matching_dict[row['attributes']] == t_row['attributes']:
+                    matching = 1
+                test_data.append([source_str, target_str, matching])
+        start_time = time.perf_counter()
+        fea = predata.convert_examples_to_features([ [x[0]+" [SEP] "+x[1]] for x in test_data ], [int(x[2]) for x in test_data], args.max_seq_length, tokenizer)
+        test_data_loader = predata.convert_fea_to_tensor(fea, args.batch_size, do_train=0)
+        f1, recall, precision = evaluate.evaluate_moe(encoder, moelayer, classifiers, test_data_loader, args=args, all=1)
+        final_ev = {}
+        final_ev['filename'] = file
+        final_ev['model'] = args.model
+        final_ev['time (sec)'] = time.perf_counter() - start_time
+        final_ev['Precision %'] = precision * 100 
+        final_ev['Recall %'] = recall * 100
+        final_ev['F1 %'] = f1 * 100
+
+        df_dictionary = pd.DataFrame([final_ev])
+
+        if os.path.exists(results_filename):
+            df_dictionary.to_csv(results_filename, mode='a+', header=False, index=False)
         else:
-            f1, recall, acc = evaluate.evaluate_moe(encoder, moelayer, classifiers, test_data_loaders[k], args=args, all=1)
-            f1s.append(f1)
-            recalls.append(recall)
-            accs.append(acc)
-    print("F1: ", f1s)
-    print("Recall: ", recalls)
-    print("ACC.", accs)
+            df_dictionary.to_csv(results_filename, mode='a+', header=True, index=False) 
+
+    # test_data_loaders = []
+    # for i in range(len(test_sets)):
+    #     print("test dataset ", i+1)
+    #     fea = predata.convert_examples_to_features([ [x[0]+" [SEP] "+x[1]] for x in test_sets[i] ], [int(x[2]) for x in test_sets[i]], args.max_seq_length, tokenizer)
+    #     test_data_loaders.append(predata.convert_fea_to_tensor(fea, args.batch_size, do_train=0))
+
+    # print("test datasets num: ",len(test_data_loaders))
+
+    # f1s = []
+    # recalls = []
+    # accs = []
+    # for k in range(len(test_data_loaders)):
+    #     print("test datasets : ",k+1)
+    #     if test_metrics[k]=='hit': # for EA
+    #         prob = evaluate.evaluate_moe(encoder, moelayer, classifiers, test_data_loaders[k], args=args, flag="get_prob", prob_name="prob.json")
+    #         evaluate.calculate_hits_k(test_sets[k], prob)
+    #     else:
+    #         f1, recall, acc = evaluate.evaluate_moe(encoder, moelayer, classifiers, test_data_loaders[k], args=args, all=1)
+    #         f1s.append(f1)
+    #         recalls.append(recall)
+    #         accs.append(acc)
+    # print("F1: ", f1s)
+    # print("Recall: ", recalls)
+    # print("ACC.", accs)
                 
                 
 
