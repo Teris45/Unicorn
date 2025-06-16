@@ -188,13 +188,13 @@ def main():
     else:
         test_metrics = args.test_metrics.split(" ")
 
-    datasets = ['assays', 'miller2', 'prospect']
-    type_ds = ['Joinable', 'Unionable', 'View-Unionable', 'Semantically-Joinable']
-    results_folder = 'content'
+    datasets = ['eurocrops']
+    type_ds = ['Joinable']
+    results_folder = 'schema'
     for dataset in datasets: 
         for type_d in type_ds:
-            directory_path = f'data/val-exp/{dataset}/{type_d}'
-            results_filename = f'results/{results_folder}/{dataset}_{type_d.lower()}.csv'
+            directory_path = f'val-exp'
+            results_filename = f'results/{results_folder}/unicorn_eurocrops.csv'
             
             if os.path.exists(results_filename):
                 print(results_filename)
@@ -215,9 +215,9 @@ def main():
                 
                 file_path = f'{directory_path}/{file}'
 
-                df_source = pd.read_csv(f"{file_path}/pyjedai/{file}_source.csv")
-                df_target = pd.read_csv(f"{file_path}/pyjedai/{file}_target.csv")
-                gtruth_filename = f'{file_path}/{file.lower()}_mapping.json'
+                df_source = pd.read_csv(f"{file_path}/pyjedai/{file}_dbf.csv")
+                df_target = pd.read_csv(f"{file_path}/pyjedai/{file}.csv")
+                gtruth_filename = f'{file_path}/{file}.json'
                 
                 #read the json file
                 with open(gtruth_filename, 'r') as f:
@@ -232,24 +232,24 @@ def main():
                 test_data = []
                 offset = df_source.shape[0]
                 for _, row in df_source.iterrows():
-                    source_str = f"[ATT] {row['id']}"
+                    source_str = f"[ATT] {row['attributes']}"
                     source_val = ""
 
-                    if isinstance(row['data'], str):
-                        data_list = ast.literal_eval(row['data'])
-                        val_list = " [VAL] ".join(data_list)
-                        source_val = f" [VAL] {val_list}"
+                    # if isinstance(row['data'], str):
+                    #     data_list = ast.literal_eval(row['data'])
+                    #     val_list = " [VAL] ".join(data_list)
+                    #     source_val = f" [VAL] {val_list}"
 
 
                     source_str += source_val
                     
                     for _, t_row in df_target.iterrows():
-                        target_str = f"[ATT] {t_row['id'] + offset}"
+                        target_str = f"[ATT] {t_row['attributes']}"
                         target_val = ""
-                        if isinstance(t_row['data'], str):
-                            t_data_list = ast.literal_eval(t_row['data'])
-                            t_val_list = " [VAL] ".join(t_data_list)
-                            target_val = f" [VAL] {t_val_list}"
+                        # if isinstance(t_row['data'], str):
+                        #     t_data_list = ast.literal_eval(t_row['data'])
+                        #     t_val_list = " [VAL] ".join(t_data_list)
+                        #     target_val = f" [VAL] {t_val_list}"
                         target_str += target_val
                         matching = 0
                         if row['attributes'] in matching_dict and matching_dict[row['attributes']] == t_row['attributes']:
@@ -276,89 +276,89 @@ def main():
                     df_dictionary.to_csv(results_filename, mode='a+', header=True, index=False)
     
     
-    dataset = 'wikidata'
-    d = {
-        "Joinable" : "Musicians_joinable", 
-        'Unionable': "Musicians_unionable",
-        'View-Unionable': "Musicians_viewunion",
-        'Semantically-Joinable' : "Musicians_semjoinable"
-    }
+    # dataset = 'wikidata'
+    # d = {
+    #     "Joinable" : "Musicians_joinable", 
+    #     'Unionable': "Musicians_unionable",
+    #     'View-Unionable': "Musicians_viewunion",
+    #     'Semantically-Joinable' : "Musicians_semjoinable"
+    # }
     
-    directory_path = f'data/val-exp/Wikidata/Musicians'
-    for type_d in type_ds:
-        results_filename = f'results/{results_folder}/{dataset}_{type_d.lower()}.csv'
+    # directory_path = f'data/val-exp/Wikidata/Musicians'
+    # for type_d in type_ds:
+    #     results_filename = f'results/{results_folder}/{dataset}_{type_d.lower()}.csv'
     
-        if os.path.exists(results_filename):
-            print(results_filename)
-            continue
+    #     if os.path.exists(results_filename):
+    #         print(results_filename)
+    #         continue
 
-        if not os.path.exists(directory_path):
-            raise FileNotFoundError(f"The path '{directory_path}' does not exist.")
+    #     if not os.path.exists(directory_path):
+    #         raise FileNotFoundError(f"The path '{directory_path}' does not exist.")
             
-        # Print the immediate subfolders
+    #     # Print the immediate subfolders
         
-        file = d[type_d].lower()
-        file_path = f'{directory_path}/{d[type_d]}'
+    #     file = d[type_d].lower()
+    #     file_path = f'{directory_path}/{d[type_d]}'
         
 
-        df_source = pd.read_csv(f"{file_path}/pyjedai/{file}_source.csv")
-        df_target = pd.read_csv(f"{file_path}/pyjedai/{file}_target.csv")
-        gtruth_filename = f'{file_path}/{file.lower()}_mapping.json'
+    #     df_source = pd.read_csv(f"{file_path}/pyjedai/{file}_source.csv")
+    #     df_target = pd.read_csv(f"{file_path}/pyjedai/{file}_target.csv")
+    #     gtruth_filename = f'{file_path}/{file.lower()}_mapping.json'
         
-        #read the json file
-        with open(gtruth_filename, 'r') as f:
-            gtruth_data = json.load(f)
+    #     #read the json file
+    #     with open(gtruth_filename, 'r') as f:
+    #         gtruth_data = json.load(f)
         
-        matching_dict = {}
+    #     matching_dict = {}
 
-        for pair in gtruth_data['matches']:
-            matching_dict[pair['source_column']] = pair['target_column']
+    #     for pair in gtruth_data['matches']:
+    #         matching_dict[pair['source_column']] = pair['target_column']
 
         
-        test_data = []
-        offset = df_source.shape[0]
-        for _, row in df_source.iterrows():
-            source_str = f"[ATT] {row['attributes']}"
-            # source_val = ""
+    #     test_data = []
+    #     offset = df_source.shape[0]
+    #     for _, row in df_source.iterrows():
+    #         source_str = f"[ATT] {row['attributes']}"
+    #         # source_val = ""
 
-            # if isinstance(row['data'], str):
-            #     data_list = ast.literal_eval(row['data'])
-            #     val_list = " [VAL] ".join(data_list)
-            #     source_val = f" [VAL] {val_list}"
+    #         # if isinstance(row['data'], str):
+    #         #     data_list = ast.literal_eval(row['data'])
+    #         #     val_list = " [VAL] ".join(data_list)
+    #         #     source_val = f" [VAL] {val_list}"
 
 
-            # source_str += source_val
+    #         # source_str += source_val
             
-            for _, t_row in df_target.iterrows():
-                target_str = f"[ATT] {t_row['attributes']}"
-                # target_val = ""
-                # if isinstance(t_row['data'], str):
-                #     t_data_list = ast.literal_eval(t_row['data'])
-                #     t_val_list = " [VAL] ".join(t_data_list)
-                #     target_val = f" [VAL] {t_val_list}"
-                # target_str += target_val
-                matching = 0
-                if row['attributes'] in matching_dict and matching_dict[row['attributes']] == t_row['attributes']:
-                    matching = 1
-                test_data.append([source_str, target_str, matching])
-        start_time = time.perf_counter()
-        fea = predata.convert_examples_to_features([ [x[0]+" [SEP] "+x[1]] for x in test_data ], [int(x[2]) for x in test_data], args.max_seq_length, tokenizer)
-        test_data_loader = predata.convert_fea_to_tensor(fea, args.batch_size, do_train=0)
-        f1, recall, precision = evaluate.evaluate_moe(encoder, moelayer, classifiers, test_data_loader, args=args, all=1)
-        final_ev = {}
-        final_ev['filename'] = file
-        final_ev['model'] = args.model
-        final_ev['time (sec)'] = time.perf_counter() - start_time
-        final_ev['Precision %'] = precision * 100 
-        final_ev['Recall %'] = recall * 100
-        final_ev['F1 %'] = f1 * 100
+    #         for _, t_row in df_target.iterrows():
+    #             target_str = f"[ATT] {t_row['attributes']}"
+    #             # target_val = ""
+    #             # if isinstance(t_row['data'], str):
+    #             #     t_data_list = ast.literal_eval(t_row['data'])
+    #             #     t_val_list = " [VAL] ".join(t_data_list)
+    #             #     target_val = f" [VAL] {t_val_list}"
+    #             # target_str += target_val
+    #             matching = 0
+    #             if row['attributes'] in matching_dict and matching_dict[row['attributes']] == t_row['attributes']:
+    #                 matching = 1
+    #             test_data.append([source_str, target_str, matching])
+    #     start_time = time.perf_counter()
+    #     fea = predata.convert_examples_to_features([ [x[0]+" [SEP] "+x[1]] for x in test_data ], [int(x[2]) for x in test_data], args.max_seq_length, tokenizer)
+    #     test_data_loader = predata.convert_fea_to_tensor(fea, args.batch_size, do_train=0)
+    #     f1, recall, precision = evaluate.evaluate_moe(encoder, moelayer, classifiers, test_data_loader, args=args, all=1)
+    #     final_ev = {}
+    #     final_ev['filename'] = file
+    #     final_ev['model'] = args.model
+    #     final_ev['time (sec)'] = time.perf_counter() - start_time
+    #     final_ev['Precision %'] = precision * 100 
+    #     final_ev['Recall %'] = recall * 100
+    #     final_ev['F1 %'] = f1 * 100
 
-        df_dictionary = pd.DataFrame([final_ev])
+    #     df_dictionary = pd.DataFrame([final_ev])
 
-        if os.path.exists(results_filename):
-            df_dictionary.to_csv(results_filename, mode='a+', header=False, index=False)
-        else:
-            df_dictionary.to_csv(results_filename, mode='a+', header=True, index=False) 
+    #     if os.path.exists(results_filename):
+    #         df_dictionary.to_csv(results_filename, mode='a+', header=False, index=False)
+    #     else:
+    #         df_dictionary.to_csv(results_filename, mode='a+', header=True, index=False) 
 
     # test_data_loaders = []
     # for i in range(len(test_sets)):
