@@ -7,7 +7,7 @@ import csv
 import argparse
 import os
 import time
-
+import datetime
 from unicorn.model.encoder import (BertEncoder, MPEncoder, DistilBertEncoder, DistilRobertaEncoder, DebertaBaseEncoder, DebertaLargeEncoder,
                    RobertaEncoder, XLNetEncoder)
 from unicorn.model.matcher import Classifier, MOEClassifier
@@ -188,13 +188,13 @@ def main():
     else:
         test_metrics = args.test_metrics.split(" ")
 
-    datasets = ['eurocrops']
+    datasets = ['agroportal']
     type_ds = ['Joinable']
     results_folder = 'schema'
     for dataset in datasets: 
         for type_d in type_ds:
-            directory_path = f'val-exp'
-            results_filename = f'results/{results_folder}/unicorn_eurocrops.csv'
+            directory_path = f'data/val-exp'
+            results_filename = f'results/{results_folder}/unicorn_agroportal.csv'
             
             if os.path.exists(results_filename):
                 print(results_filename)
@@ -205,35 +205,65 @@ def main():
                     
             # Print the immediate subfolders
             print(f"Immediate subfolders of '{directory_path}':")
-            my_list = os.listdir(directory_path)
-            cnt = 0
-            for file in my_list:
-                print(f"------ {cnt}/{len(my_list)} ------------ {dataset} {type_d} \n")
-                if contains_ec_regex(file):
-                    cnt += 1
-                    continue
+            # my_list = os.listdir(directory_path)
+            # cnt = 0
+            # for file in my_list:
+            file = 'agroportal'
+                # print(f"------ {cnt}/{len(my_list)} ------------ {dataset} {type_d} \n")
+                # if contains_ec_regex(file):
+                #     cnt += 1
+                #     continue
                 
-                file_path = f'{directory_path}/{file}'
+            file_path = f'{directory_path}/{file}'
 
-                df_source = pd.read_csv(f"{file_path}/pyjedai/{file}_dbf.csv")
-                df_target = pd.read_csv(f"{file_path}/pyjedai/{file}.csv")
-                gtruth_filename = f'{file_path}/{file}.json'
+
+            d_type_d = {
+                "id": "string",
+                "attributes": "string",
+                "data": "string"
+            }
+
+
+            df_source = pd.read_csv(f"{file_path}/taxref-ld.csv", dtype = d_type_d)
+            df_target = pd.read_csv(f"{file_path}/ncbitaxon.csv", dtype = d_type_d)
+            ground_truth = pd.read_csv(f"{file_path}/mappings.csv").astype(str)
+            ground_truth.columns = ['source_column', 'target_column']
+            # gtruth_filename = f'{file_path}/{file}.json'
                 
                 #read the json file
-                with open(gtruth_filename, 'r') as f:
-                    gtruth_data = json.load(f)
-                
-                matching_dict = {}
+                # with open(gtruth_filename, 'r') as f:
+                    # gtruth_data = json.load(f)
+            print(f"Data Loaded: {datetime.datetime.now()}")
+            matching_dict = {}
 
-                for pair in gtruth_data['matches']:
-                    matching_dict[pair['source_column']] = pair['target_column']
+            # for pair in gtruth_data['matches']:
+            for _,row in ground_truth.iterrows():
+                matching_dict[row['source_column']] = row['target_column']
 
-                
-                test_data = []
-                offset = df_source.shape[0]
-                for _, row in df_source.iterrows():
-                    source_str = f"[ATT] {row['attributes']}"
-                    source_val = ""
+            print(f"Matching dict Loaded: {datetime.datetime.now()}")
+            
+            test_data = []
+            
+            offset = df_source.shape[0]
+            # Precompute source strings and ids
+            source_data = [(row['id'], f"[ATT] {row['attributes']}") for _, row in df_source.iterrows()]
+            print(f"Source Data Loaded: {datetime.datetime.now()}")
+            print(source_data[:10])
+            target_data = [(row['id'], f"[ATT] {row['attributes']}") for _, row in df_target.iterrows()]
+            print(f"Target Data Loaded: {datetime.datetime.now()}")
+            print(target_data[:10])
+            
+            # Prepare test_data using list comprehension
+            test_data = [
+                [source_str, target_str, int(source_id in matching_dict and matching_dict[source_id] == target_id)]
+                for source_id, source_str in source_data
+                for target_id, target_str in target_data
+            ]
+           
+            
+            # for _, row in df_source.iterrows():
+                # source_str = f"[ATT] {row['attributes']}"
+                # source_val = ""
 
                     # if isinstance(row['data'], str):
                     #     data_list = ast.literal_eval(row['data'])
@@ -241,40 +271,49 @@ def main():
                     #     source_val = f" [VAL] {val_list}"
 
 
-                    source_str += source_val
+                # source_str += source_val
                     
-                    for _, t_row in df_target.iterrows():
-                        target_str = f"[ATT] {t_row['attributes']}"
-                        target_val = ""
-                        # if isinstance(t_row['data'], str):
+                # for _, t_row in df_target.iterrows():
+                #     target_str = f"[ATT] {t_row['attributes']}"
+                #     target_val = ""
+                #         # if isinstance(t_row['data'], str):
                         #     t_data_list = ast.literal_eval(t_row['data'])
                         #     t_val_list = " [VAL] ".join(t_data_list)
                         #     target_val = f" [VAL] {t_val_list}"
-                        target_str += target_val
-                        matching = 0
-                        if row['attributes'] in matching_dict and matching_dict[row['attributes']] == t_row['attributes']:
-                            matching = 1
-                        test_data.append([source_str, target_str, matching])
-                start_time = time.perf_counter()
-                fea = predata.convert_examples_to_features([ [x[0]+" [SEP] "+x[1]] for x in test_data ], [int(x[2]) for x in test_data], args.max_seq_length, tokenizer)
-                test_data_loader = predata.convert_fea_to_tensor(fea, args.batch_size, do_train=0)
-                f1, recall, precision = evaluate.evaluate_moe(encoder, moelayer, classifiers, test_data_loader, args=args, all=1)
-                final_ev = {}
-                final_ev['filename'] = file
-                final_ev['model'] = args.model
-                final_ev['time (sec)'] = time.perf_counter() - start_time
-                final_ev['Precision %'] = precision * 100 
-                final_ev['Recall %'] = recall * 100
-                final_ev['F1 %'] = f1 * 100
+                    # target_str += target_val
+                    # matching = 0
+                    # if row['id'] in matching_dict and matching_dict[row['id']] == t_row['id']:
+                    #     matching = 1
+                    # test_data.append([source_str, target_str, matching])
 
-                df_dictionary = pd.DataFrame([final_ev])
-                cnt += 1
+            print(f"Product created: {datetime.datetime.now()}")
+            print(test_data[1], test_data[0])
+            start_time = time.perf_counter()
+            fea = predata.convert_examples_to_features([ [x[0]+" [SEP] "+x[1]] for x in test_data ], [int(x[2]) for x in test_data], args.max_seq_length, tokenizer)
+            print(f"Convert examples to features done: {datetime.datetime.now()}")
+            
+            test_data_loader = predata.convert_fea_to_tensor(fea, args.batch_size, do_train=0)
+            print(f"Convert features to tensor done: {datetime.datetime.now()}")
+            
+            f1, recall, precision = evaluate.evaluate_moe(encoder, moelayer, classifiers, test_data_loader, args=args, all=1)
+            print(f"Evaluated mix of experts done: {datetime.datetime.now()}")
+            
+            final_ev = {}
+            final_ev['filename'] = file
+            final_ev['model'] = args.model
+            final_ev['time (sec)'] = time.perf_counter() - start_time
+            final_ev['Precision %'] = precision * 100 
+            final_ev['Recall %'] = recall * 100
+            final_ev['F1 %'] = f1 * 100
 
-                if os.path.exists(results_filename):
-                    df_dictionary.to_csv(results_filename, mode='a+', header=False, index=False)
-                else:
-                    df_dictionary.to_csv(results_filename, mode='a+', header=True, index=False)
-    
+            df_dictionary = pd.DataFrame([final_ev])
+            cnt += 1
+
+            if os.path.exists(results_filename):
+                df_dictionary.to_csv(results_filename, mode='a+', header=False, index=False)
+            else:
+                df_dictionary.to_csv(results_filename, mode='a+', header=True, index=False)
+
     
     # dataset = 'wikidata'
     # d = {
