@@ -1,0 +1,2 @@
+filename,model,time (sec),Precision %,Recall %,F1 %
+agroportal,deberta_base,132.5,99.22860434184034,99.48101691373564,99.35460031329495

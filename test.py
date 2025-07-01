@@ -20,6 +20,7 @@ import pandas as pd
 import re
 import json
 import ast
+import itertools
 
 
 def contains_ec_regex(s):
@@ -193,23 +194,28 @@ def main():
     results_folder = 'schema'
     for dataset in datasets: 
         for type_d in type_ds:
+            
             directory_path = f'data/val-exp'
             results_filename = f'results/{results_folder}/unicorn_agroportal.csv'
             
-            if os.path.exists(results_filename):
-                print(results_filename)
-                continue
+            
+            # if os.path.exists(results_filename):
+            #     print(results_filename)
+            #     continue
 
             if not os.path.exists(directory_path):
                 raise FileNotFoundError(f"The path '{directory_path}' does not exist.")
                     
             # Print the immediate subfolders
-            print(f"Immediate subfolders of '{directory_path}':")
+            # print(f"Immediate subfolders of '{directory_path}':")
             # my_list = os.listdir(directory_path)
             # cnt = 0
             # for file in my_list:
+                # if file == 'yago-wikidata':
+                    # continue
             file = 'agroportal'
-                # print(f"------ {cnt}/{len(my_list)} ------------ {dataset} {type_d} \n")
+            print(file)
+            # print(f"------ {cnt}/{len(my_list)} ------------ {dataset} {type_d} \n")
                 # if contains_ec_regex(file):
                 #     cnt += 1
                 #     continue
@@ -220,84 +226,152 @@ def main():
             d_type_d = {
                 "id": "string",
                 "attributes": "string",
-                "data": "string"
+                "data" : "string"
             }
-
 
             df_source = pd.read_csv(f"{file_path}/taxref-ld.csv", dtype = d_type_d)
             df_target = pd.read_csv(f"{file_path}/ncbitaxon.csv", dtype = d_type_d)
             ground_truth = pd.read_csv(f"{file_path}/mappings.csv").astype(str)
             ground_truth.columns = ['source_column', 'target_column']
-            # gtruth_filename = f'{file_path}/{file}.json'
-                
+                    
                 #read the json file
                 # with open(gtruth_filename, 'r') as f:
                     # gtruth_data = json.load(f)
             print(f"Data Loaded: {datetime.datetime.now()}")
-            matching_dict = {}
 
-            # for pair in gtruth_data['matches']:
-            for _,row in ground_truth.iterrows():
-                matching_dict[row['source_column']] = row['target_column']
+            matching_dict_target = {row['target_column'] : row['source_column'] 
+                for _, row in ground_truth.iterrows()}
+                
+            matching_dict = {row['source_column'] : row['target_column'] 
+                for _, row in ground_truth.iterrows()}
+
+
 
             print(f"Matching dict Loaded: {datetime.datetime.now()}")
             
-            test_data = []
+            # test_data = []
             
-            offset = df_source.shape[0]
-            # Precompute source strings and ids
-            source_data = [(row['id'], f"[ATT] {row['attributes']}") for _, row in df_source.iterrows()]
+            # # Precompute source strings and ids
+            source_data = {row['id'] : f"[ATT] {row['attributes']}" for _, row in df_source.iterrows()}
             print(f"Source Data Loaded: {datetime.datetime.now()}")
-            print(source_data[:10])
-            target_data = [(row['id'], f"[ATT] {row['attributes']}") for _, row in df_target.iterrows()]
+            target_data = {row['id'] : f"[ATT] {row['attributes']}" for _, row in df_target.iterrows()}
             print(f"Target Data Loaded: {datetime.datetime.now()}")
-            print(target_data[:10])
-            
-            # Prepare test_data using list comprehension
-            test_data = [
-                [source_str, target_str, int(source_id in matching_dict and matching_dict[source_id] == target_id)]
-                for source_id, source_str in source_data
-                for target_id, target_str in target_data
-            ]
-           
-            
-            # for _, row in df_source.iterrows():
-                # source_str = f"[ATT] {row['attributes']}"
-                # source_val = ""
-
-                    # if isinstance(row['data'], str):
-                    #     data_list = ast.literal_eval(row['data'])
-                    #     val_list = " [VAL] ".join(data_list)
-                    #     source_val = f" [VAL] {val_list}"
 
 
-                # source_str += source_val
+            if len(source_data) > len(target_data):
+                is_source = 'big'
+                small_data = target_data
+                big_data = source_data
+            else: 
+                is_source = 'small'
+                small_data = source_data
+                big_data = target_data
+
+            test_data = []
+                
+                # for match_id in matching_dict:
+                #     target_id = matching_dict[match_id]
+                #     if is_source == 'big': 
+                #         source_str = big_data.pop(match_id)
+                #         target_str = small_data[target_id]
+                #     else:
+                #         source_str = small_data[match_id]
+                #         target_str = big_data.pop(target_id)
+                        
+                #     test_data.append([source_str, target_str, 1])
                     
-                # for _, t_row in df_target.iterrows():
-                #     target_str = f"[ATT] {t_row['attributes']}"
-                #     target_val = ""
-                #         # if isinstance(t_row['data'], str):
-                        #     t_data_list = ast.literal_eval(t_row['data'])
-                        #     t_val_list = " [VAL] ".join(t_data_list)
-                        #     target_val = f" [VAL] {t_val_list}"
-                    # target_str += target_val
-                    # matching = 0
-                    # if row['id'] in matching_dict and matching_dict[row['id']] == t_row['id']:
-                    #     matching = 1
-                    # test_data.append([source_str, target_str, matching])
+                #     for i in range(100):
+                #         # Get one item from small_data (assuming it's a dict, adjust if needed)
+                #         id_small, small_str = next(iter(small_data.items()))
+                #         if id_small == match_id or id_small == target_id:
+                #             id_small, small_str = next(iter(small_data.items()))
+                #         if is_source == 'small' and id_small in source_data:
+                #             source_str = small_str
+                #         elif is_source == 'big' and id_small in target_data:
+                #             target_str = small_str
+                #         else: 
+                #             continue
+                #         test_data.append([source_str, target_str, 0])
+                        
+                        
+                # print("test_data 1/2")
+
+                    
+                # print(len(source_data))
+                # print(len(target_data))
+                
+                
+
+                # while big_data:
+                #     # Get one item from big_data
+                #     id_big, big_str = big_data.popitem() 
+                    
+                #     if id_big in matching_dict:
+                #         match_id_source = id_big
+                #         match_id_target = matching_dict[id_big]
+                #         source_str = big_str
+                #         target_str = target_data[match_id_target]
+                #         test_data.append([source_str, target_str, 1])
+                #     elif id_big in matching_dict_target:
+                #         match_id_source = matching_dict_target[id_big]
+                #         match_id_target = id_big
+                #         source_str = source_data[match_id_source]
+                #         target_str = big_str
+                #         test_data.append([source_str, target_str, 1])
+                                            
+                #     for i in range(100):
+                #         # Get one item from small_data (assuming it's a dict, adjust if needed)
+                #         id_small, small_str = next(iter(small_data.items()))
+                #         if id_big == match_id_source and id_small == match_id_target:
+                #             id_small, small_str = next(iter(small_data.items()))
+                #         elif id_big == match_id_target and id_small == match_id_source:
+                #             id_small, small_str = next(iter(small_data.items()))
+                            
+                #         if is_source == 'small' and id_small in source_data:
+                #             source_str = small_str
+                #         elif is_source == 'big' and id_small in target_data:
+                #             target_str = small_str
+                #         else: 
+                #             continue
+                #         test_data.append([source_str, target_str, 0])
+
+                
+                # print("test_data 2/2")
+
+            import sys
+
+                # ITEM_SIZE = 5 * 1024  # 5 KB
+                # RAM_LIMIT = 20 * 1024**3  # 20 GB
+
+            max_items = 2 * 10**6 
+            print(f"Max items: {max_items}")
+                
+                
+
+
+            test_data_gen = (
+                [source_data[source_id], target_data[target_id], int(source_id in matching_dict and matching_dict[source_id] == target_id)]
+                for source_id in source_data
+                for target_id in target_data
+            )
+
+            test_data =  list(itertools.islice(test_data_gen, max_items))  # sequential
+
+            
+            print(len(test_data))
+
 
             print(f"Product created: {datetime.datetime.now()}")
-            print(test_data[1], test_data[0])
             start_time = time.perf_counter()
             fea = predata.convert_examples_to_features([ [x[0]+" [SEP] "+x[1]] for x in test_data ], [int(x[2]) for x in test_data], args.max_seq_length, tokenizer)
             print(f"Convert examples to features done: {datetime.datetime.now()}")
-            
+        
             test_data_loader = predata.convert_fea_to_tensor(fea, args.batch_size, do_train=0)
             print(f"Convert features to tensor done: {datetime.datetime.now()}")
-            
+        
             f1, recall, precision = evaluate.evaluate_moe(encoder, moelayer, classifiers, test_data_loader, args=args, all=1)
             print(f"Evaluated mix of experts done: {datetime.datetime.now()}")
-            
+        
             final_ev = {}
             final_ev['filename'] = file
             final_ev['model'] = args.model
@@ -307,7 +381,8 @@ def main():
             final_ev['F1 %'] = f1 * 100
 
             df_dictionary = pd.DataFrame([final_ev])
-            cnt += 1
+            # cnt+=1
+                # del test_data, df_source, df_target, matching_dict
 
             if os.path.exists(results_filename):
                 df_dictionary.to_csv(results_filename, mode='a+', header=False, index=False)
